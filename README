@@ -1,0 +1,244 @@
+ Data Persistence & Profile Classification API
+
+A backend API that aggregates data from multiple external services, processes it into a structured profile, stores it in a PostgreSQL database, and exposes endpoints for managing and retrieving profiles.
+
+
+
+Base URL
+https://datapersistent-api.vercel.app
+
+
+Features
+Multi-API integration (Genderize, Agify, Nationalize)
+Data processing & classification
+Persistent storage using PostgreSQL (via Prisma)
+Idempotent profile creation (prevents duplicates)
+Filtering support (gender, country, age group)
+RESTful API design
+Robust error handling & edge case coverage
+
+
+Tech Stack
+Node.js
+Express.js
+PostgreSQL (Neon)
+Prisma ORM
+Axios
+UUID v7
+
+External APIs Used
+Genderize → Predicts gender
+Agify → Predicts age
+Nationalize → Predicts nationality
+
+
+API Endpoints
+
+
+1. Create Profile
+POST /api/profiles
+
+Creates a new profile or returns an existing one if the name already exists.
+
+Request Body
+{
+  "name": "rachel"
+}
+
+Example Response (201 Created)
+{
+  "status": "success",
+  "data": {
+    "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
+    "name": "rachel",
+    "gender": "female",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 53,
+    "age_group": "adult",
+    "country_id": "CN",
+    "country_probability": 0.85,
+    "created_at": "2026-04-17T12:37:35.809Z"
+  }
+}
+
+Idempotency (Duplicate Handling)
+
+If the same name is submitted again:
+
+{
+  "status": "success",
+  "message": "Profile already exists",
+  "data": { ...existing profile }
+}
+
+
+2. Get All Profiles
+GET /api/profiles
+ Example Response
+{
+  "status": "success",
+  "count": 3,
+  "data": [
+    {
+      "id": "019d9b72-59c0-7629-b24b-bf91ebe04986",
+      "name": "samuel",
+      "gender": "male",
+      "age": 59,
+      "age_group": "adult",
+      "country_id": "NG"
+    },
+    {
+      "id": "019d9b94-ac0e-7469-9c84-c26e29bfe101",
+      "name": "david",
+      "gender": "male",
+      "age": 64,
+      "age_group": "senior",
+      "country_id": "NG"
+    },
+    {
+      "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
+      "name": "rachel",
+      "gender": "female",
+      "age": 53,
+      "age_group": "adult",
+      "country_id": "CN"
+    }
+  ]
+}
+
+
+ Filtering
+
+Supports case-insensitive query parameters:
+
+gender
+country_id
+age_group
+Example
+GET /api/profiles?gender=female
+Response
+{
+  "status": "success",
+  "count": 1,
+  "data": [
+    {
+      "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
+      "name": "rachel",
+      "gender": "female",
+      "age": 53,
+      "age_group": "adult",
+      "country_id": "CN"
+    }
+  ]
+}
+
+
+Get Single Profile
+GET /api/profiles/{id}
+Example
+GET /api/profiles/019d9b72-59c0-7629-b24b-bf91ebe04986
+Response
+{
+  "status": "success",
+  "data": {
+    "id": "019d9b72-59c0-7629-b24b-bf91ebe04986",
+    "name": "samuel",
+    "gender": "male",
+    "gender_probability": 0.99,
+    "sample_size": 603089,
+    "age": 59,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.1258960220430007,
+    "created_at": "2026-04-17T12:37:35.809Z"
+  }
+}
+
+
+4. Delete Profile
+DELETE /api/profiles/{id}
+Example
+DELETE /api/profiles/019d9b9a-3fde-7029-bd80-a17a403f9bfc
+Response
+204 No Content
+
+Data Processing Logic
+Age Group Classification
+0–12 → child
+13–19 → teenager
+20–59 → adult
+60+ → senior
+Nationality Selection
+Chooses the country with the highest probability from Nationalize API
+Idempotency
+Each name is unique in the database
+Duplicate requests return the existing profile instead of creating a new one
+
+
+Error Handling
+All errors follow this format:
+
+{
+  "status": "error",
+  "message": "..."
+}
+
+
+Error Types
+400 → Missing or empty name
+422 → Invalid input type
+404 → Profile not found
+502 → External API failure
+
+
+Edge Case Handling
+Genderize returns null or count = 0 → rejected
+Agify returns null age → rejected
+Nationalize returns no country data → rejected
+
+CORS
+Access-Control-Allow-Origin: *
+
+
+Database Schema (Prisma)
+model Profile {
+  id                  String   @id
+  name                String   @unique
+  gender              String
+  gender_probability  Float
+  sample_size         Int
+  age                 Int
+  age_group           String
+  country_id          String
+  country_probability Float
+  created_at          DateTime @default(now())
+}
+
+Running Locally
+npm install
+npx prisma migrate dev
+node index.js
+📂 Project Structure
+src/
+ ├── routes/
+ ├── controllers/
+ ├── services/
+ ├── prisma/
+ └── app.js
+
+
+✅ Submission Checklist
+ All endpoints implemented
+ Data persistence working
+ Idempotency handled
+ Filtering implemented
+ Edge cases handled
+ Proper error responses
+ Live deployment available
+
+
+🧠 Final Note
+All timestamps are in UTC (ISO 8601)
+External API calls are executed in parallel for performance
+Responses strictly follow the required structure
