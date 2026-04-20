@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { v7: uuidv7 } = require('uuid');
 const {prisma }= require("./dbController");
 const {parseNLQuery } = require("../utils/nlpParser");
 
@@ -92,7 +93,7 @@ exports.getProfiles  = async (req, res)=>{
         // save to DB
         const profile = await prisma.Profile.create({
             data: {
-                
+                id: uuidv7(),
                 name,
                 gender: genderData.gender,
                 gender_probability: genderData.probability,

@@ -1,244 +1,53 @@
- Data Persistence & Profile Classification API
+# Insighta Labs — Intelligence Query Engine
 
-A backend API that aggregates data from multiple external services, processes it into a structured profile, stores it in a PostgreSQL database, and exposes endpoints for managing and retrieving profiles.
+Hey there! This is our little project for handling natural language queries on profiles. We're using a straightforward rule-based parser—no fancy AI or LLMs here. Basically, when you hit the `/api/profiles/search?q=` endpoint with some plain English, it tries to figure out what filters you mean by matching against patterns and keywords.
 
+## What We Support
 
+### Gender
+You can ask for males or females. Say "males" or "male" to filter by gender=male, same for females. If you mention both, like "male and female," we skip the gender filter altogether.
 
-Base URL
-https://datapersistent-api.vercel.app
+### Age Groups
+- Kids or children? That's age_group=child.
+- Teens, teenagers, etc.? age_group=teenager.
+- Adults? age_group=adult.
+- Seniors or elderly? age_group=senior.
 
+### Age Ranges
+- "Young" sets min_age to 16 and max_age to 24 (just for parsing, not stored).
+- Stuff like "above 30," "over 30," or "older than 30" means min_age=30.
+- "Below 20," "under 20," "younger than 20" gives max_age=20.
+- "Aged 25" means exactly min_age=25 and max_age=25.
 
-Features
-Multi-API integration (Genderize, Agify, Nationalize)
-Data processing & classification
-Persistent storage using PostgreSQL (via Prisma)
-Idempotent profile creation (prevents duplicates)
-Filtering support (gender, country, age group)
-RESTful API design
-Robust error handling & edge case coverage
+### Countries
+Use "from" followed by the country name. For example, "from nigeria" turns into country_id=NG. We support over 40 countries, mostly African plus some international ones.
 
+## Some Examples
+Here's how queries translate to filters:
 
-Tech Stack
-Node.js
-Express.js
-PostgreSQL (Neon)
-Prisma ORM
-Axios
-UUID v7
+- "young males" → gender=male, min_age=16, max_age=24
+- "females above 30" → gender=female, min_age=30
+- "people from angola" → country_id=AO
+- "adult males from kenya" → gender=male, age_group=adult, country_id=KE
+- "male and female teenagers above 17" → age_group=teenager, min_age=17
 
-External APIs Used
-Genderize → Predicts gender
-Agify → Predicts age
-Nationalize → Predicts nationality
+## How It Actually Works
+1. We lowercase and trim your query.
+2. Look for gender words using regex like `\bmales?\b`.
+3. Match age group words from a simple dictionary.
+4. Pull out age modifiers (above, over, below, etc.) with more regex.
+5. Grab the country after "from" and match it to our country list.
+6. If nothing matches, we just say "Unable to interpret query."
 
+---
 
-API Endpoints
+## Stuff We Haven't Figured Out Yet
 
-
-1. Create Profile
-POST /api/profiles
-
-Creates a new profile or returns an existing one if the name already exists.
-
-Request Body
-{
-  "name": "rachel"
-}
-
-Example Response (201 Created)
-{
-  "status": "success",
-  "data": {
-    "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
-    "name": "rachel",
-    "gender": "female",
-    "gender_probability": 0.99,
-    "sample_size": 1234,
-    "age": 53,
-    "age_group": "adult",
-    "country_id": "CN",
-    "country_probability": 0.85,
-    "created_at": "2026-04-17T12:37:35.809Z"
-  }
-}
-
-Idempotency (Duplicate Handling)
-
-If the same name is submitted again:
-
-{
-  "status": "success",
-  "message": "Profile already exists",
-  "data": { ...existing profile }
-}
-
-
-2. Get All Profiles
-GET /api/profiles
- Example Response
-{
-  "status": "success",
-  "count": 3,
-  "data": [
-    {
-      "id": "019d9b72-59c0-7629-b24b-bf91ebe04986",
-      "name": "samuel",
-      "gender": "male",
-      "age": 59,
-      "age_group": "adult",
-      "country_id": "NG"
-    },
-    {
-      "id": "019d9b94-ac0e-7469-9c84-c26e29bfe101",
-      "name": "david",
-      "gender": "male",
-      "age": 64,
-      "age_group": "senior",
-      "country_id": "NG"
-    },
-    {
-      "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
-      "name": "rachel",
-      "gender": "female",
-      "age": 53,
-      "age_group": "adult",
-      "country_id": "CN"
-    }
-  ]
-}
-
-
- Filtering
-
-Supports case-insensitive query parameters:
-
-gender
-country_id
-age_group
-Example
-GET /api/profiles?gender=female
-Response
-{
-  "status": "success",
-  "count": 1,
-  "data": [
-    {
-      "id": "019d9b9a-3fde-7029-bd80-a17a403f9bfc",
-      "name": "rachel",
-      "gender": "female",
-      "age": 53,
-      "age_group": "adult",
-      "country_id": "CN"
-    }
-  ]
-}
-
-
-Get Single Profile
-GET /api/profiles/{id}
-Example
-GET /api/profiles/019d9b72-59c0-7629-b24b-bf91ebe04986
-Response
-{
-  "status": "success",
-  "data": {
-    "id": "019d9b72-59c0-7629-b24b-bf91ebe04986",
-    "name": "samuel",
-    "gender": "male",
-    "gender_probability": 0.99,
-    "sample_size": 603089,
-    "age": 59,
-    "age_group": "adult",
-    "country_id": "NG",
-    "country_probability": 0.1258960220430007,
-    "created_at": "2026-04-17T12:37:35.809Z"
-  }
-}
-
-
-4. Delete Profile
-DELETE /api/profiles/{id}
-Example
-DELETE /api/profiles/019d9b9a-3fde-7029-bd80-a17a403f9bfc
-Response
-204 No Content
-
-Data Processing Logic
-Age Group Classification
-0–12 → child
-13–19 → teenager
-20–59 → adult
-60+ → senior
-Nationality Selection
-Chooses the country with the highest probability from Nationalize API
-Idempotency
-Each name is unique in the database
-Duplicate requests return the existing profile instead of creating a new one
-
-
-Error Handling
-All errors follow this format:
-
-{
-  "status": "error",
-  "message": "..."
-}
-
-
-Error Types
-400 → Missing or empty name
-422 → Invalid input type
-404 → Profile not found
-502 → External API failure
-
-
-Edge Case Handling
-Genderize returns null or count = 0 → rejected
-Agify returns null age → rejected
-Nationalize returns no country data → rejected
-
-CORS
-Access-Control-Allow-Origin: *
-
-
-Database Schema (Prisma)
-model Profile {
-  id                  String   @id
-  name                String   @unique
-  gender              String
-  gender_probability  Float
-  sample_size         Int
-  age                 Int
-  age_group           String
-  country_id          String
-  country_probability Float
-  created_at          DateTime @default(now())
-}
-
-Running Locally
-npm install
-npx prisma migrate dev
-node index.js
-📂 Project Structure
-src/
- ├── routes/
- ├── controllers/
- ├── services/
- ├── prisma/
- └── app.js
-
-
-✅ Submission Checklist
- All endpoints implemented
- Data persistence working
- Idempotency handled
- Filtering implemented
- Edge cases handled
- Proper error responses
- Live deployment available
-
-
-🧠 Final Note
-All timestamps are in UTC (ISO 8601)
-External API calls are executed in parallel for performance
-Responses strictly follow the required structure
+- No spell-checking, so "nigerla" or "femal" won't work.
+- Synonyms aren't covered—things like "guys," "women," or "kids" aren't recognized.
+- Can't handle ranges like "between 20 and 30"; only "above X" or "below X."
+- Countries with accents, like "Côte d'Ivoire," need to be written as "ivory coast."
+- Vague stuff like "old people" doesn't map (try "seniors" instead).
+- No smart guessing—"young adults" might not combine age_group=adult with the young range properly.
+- Multiple countries? Nope, "from nigeria or kenya" isn't supported.
+- Abbreviations like "NG" or "KE" in queries aren't parsed as countries.

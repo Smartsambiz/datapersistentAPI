@@ -15,14 +15,20 @@ datasource db {
 }
 
 model Profile {
-  id  String  @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar(36)
-  name  String  @unique
-  gender  String
+  id                  String   @id @db.VarChar(36)
+  name                String   @unique
+  gender              String
   gender_probability  Float
-  age Int
-  age_group String
-  country_id  String @db.VarChar(2)
-  country_name  String
+  age                 Int
+  age_group           String
+  country_id          String   @db.VarChar(2)
+  country_name        String
   country_probability Float
-  created_at  DateTime  @default(now())
+  created_at          DateTime @default(now())
+
+  @@index([gender])
+  @@index([age_group])
+  @@index([country_id])
+  @@index([age])
+  @@index([gender_probability])
 }

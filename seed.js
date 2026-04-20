@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { v7: uuidv7 } = require('uuid');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const {PrismaClient } = require("@prisma/client");
 const profiles = require("./profiles.json");
@@ -22,6 +23,7 @@ async function seed(){
                 where: {name: p.name},
                 update: {}, //update if exist
                 create: {
+                    id: uuidv7(),
                     name: p.name,
                     gender: p.gender,
                     gender_probability: p.gender_probability,
