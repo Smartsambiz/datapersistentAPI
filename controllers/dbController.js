@@ -9,6 +9,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 
 // 3. Pass the adapter to Prisma (This fixes your error)
-const prisma = new PrismaClient({ adapter });
+const prisma = global.prisma || new PrismaClient({adapter});
+
+if (process.env.NODE_ENV !== 'production') {
+  global.prisma = prisma;
+}
 
 module.exports = { prisma };
