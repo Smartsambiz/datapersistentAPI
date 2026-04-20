@@ -1,5 +1,6 @@
 const axios = require("axios");
 const {prisma }= require("./dbController");
+const {parseNLQuery } = require("../utils/nlpParser");
 
 const getAgeGroup = (age)=>{
     if(age <=12) return "child";
@@ -7,6 +8,10 @@ const getAgeGroup = (age)=>{
     if(age<=59) return "adult";
     return "senior";
 }
+
+const VALID_SORT_FIELDS = ['age', 'created_at', 'gender_probability'];
+const VALID_ORDERS = ['asc', 'desc'];
+const MAX_LIMIT = 50;
 
 exports.getProfiles  = async (req, res)=>{
     try{
@@ -91,10 +96,10 @@ exports.getProfiles  = async (req, res)=>{
                 name,
                 gender: genderData.gender,
                 gender_probability: genderData.probability,
-                sample_size: genderData.count,
                 age: ageData.age,
                 age_group,
                 country_id: topCountry.country_id,
+                country_name: topCountry.country_id,
                 country_probability: topCountry.probability,
                 created_at: new Date()
             }
@@ -135,31 +140,145 @@ exports.getSingleProfiles = async (req, res)=>{
 };
 
 exports.getAllProfilesplusFilter = async (req, res)=>{
-    const {gender, country_id, age_group} = req.query;
-
-    const filters = {};
-
-    if(gender) filters.gender = gender.toLowerCase();
-    if(country_id) filters.country_id = country_id.toUpperCase();
-    if(age_group) filters.age_group = age_group.toLowerCase();
-
-    const profiles = await prisma.Profile.findMany({
-        where: filters
-    });
-
-    res.json({
-        status: "success",
-        count: profiles.length,
-        data: profiles.map(p =>({
-            id: p.id,
-            name: p.name,
-            gender: p.gender,
-            age: p.age,
-            age_group: p.age_group,
-            country_id: p.country_id
-        }))
-    });
+    try {
+        const {gender, age_group, country_id, min_age, max_age, min_gender_probability, min_country_probability,
+            sort_by = 'created_at', order='asc', page='1', limit = '10'
+        } = req.query;
+    
+        
+        // Validate sort_by and order
+        if(!VALID_SORT_FIELDS.includes(sort_by)){
+            return res.status(422).json({ 
+                status: "error",
+                message: "Invalid query parameters"
+            });
+    
+        }
+        if(!VALID_ORDERS.includes(order)){
+            return res.status(422).json({
+                status: "error", 
+                message: "Invalid query parameters"
+            });
+    
+        }
+    
+        const parsedPage = parseInt(page);
+        const parsedLimit = Math.min(parseInt(limit), MAX_LIMIT);
+    
+        if(isNaN(parsedPage)|| isNaN(parsedLimit)|| parsedPage<1|| parsedLimit <1){
+            return res.status(422).json({
+                status: "error",
+                message: "Invalid query parameters"
+            })
+        }
+    
+        // Build where clause
+    
+        const where = {}
+        if(gender) where.gender = gender.toLowerCase();
+        if(age_group) where.age_group = age_group.toLowerCase();
+        if(country_id) where.country_id = country_id.toUpperCase();
+        if(min_age !== undefined|| max_age!==undefined){
+            where.age = {};
+            if(min_age !== undefined){
+                if(isNaN(parseInt(min_age))) return res.status(422).json({status: "error", message: "Invalid query parameter"});
+                where.age.gte = parseInt(min_age)
+            }
+            if(max_age !== undefined){
+                if(isNaN(parseInt(max_age))) return res.status(422).json({status: "error", message: "Invalid query parameter"});
+                where.age.lte = parseInt(max_age)
+            }
+        }
+        if(min_country_probability !== undefined){
+            if(isNaN(parseFloat(min_country_probability))) return res.status(422).json({ status: "error", message: "invalid query parameters"});
+            where.country_probability = {gte: parseFloat(min_country_probability)};
+        }
+    
+        const offset = (parsedPage -1) * parsedLimit;
+    
+        const [total, profiles] = await Promise.all([
+            prisma.profile.count({ where }),
+            prisma.profile.findMany({
+                where,
+                orderBy: {[sort_by]: order},
+                skip: offset,
+                take: parsedLimit,
+            })
+        ])
+    
+        res.status(200).json({
+            status: "success",
+            page: parsedPage,
+            limit: parsedLimit,
+            total,
+            data: profiles
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({status: "error", message: "Server error"})
+    }
 };
+
+
+exports.searchProfiles = async (req, res)=>{
+    try {
+
+        const {q, page ='1', limit = '10'} = req.query;
+
+        if (!q|| !q.trim()){
+            return res.status(400).json({ status: "error", message: "Missing or empty parameter"});
+        }
+
+        const filters = parseNLQuery(q);
+        if(!filters){
+            return res.status(422).json({status: "error", message: "Unable to intepret query"});
+
+        }
+
+        const parsedPage = parseInt(page);
+        const parsedLimit = Math.min((parseInt(limit), MAX_LIMIT));
+
+        if(isNaN(parsedPage)|| isNaN(parsedLimit) || parsedPage < 1|| parsedLimit <1){
+            return res.status(422).json({ status: "error", message: "Invalid query parameters"});
+        }
+
+        // Build where clause
+    
+        const where = {}
+        if(filters.gender) where.gender = filters.gender;
+        if(filters.age_group) where.age_group = filters.age_group;
+        if(filters.country_id) where.country_id = filters.country_id;
+        if(filters.min_age !== undefined|| filters.max_age!==undefined){
+            where.age = {};
+            if(filters.min_age !== undefined) where.age.gte = filters.min_age;
+            if(filters.max_age !== undefined) where.age.lte = filters.max_age;
+        }
+
+        const offset = (parsedPage -1 ) * parsedLimit;
+
+        const [total, profiles] = await Promise.all([
+            prisma.profile.count({ where }),
+            prisma.profile.findMany({
+                where,
+                orderBy: {created_at: 'asc'},
+                skip: offset,
+                take: parsedLimit,
+            })
+        ])
+
+        return res.status(200).json({
+            status: "success",
+            page: parsedPage,
+            limit: parsedLimit,
+            total,
+            data: profiles
+        })
+        
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({status: "error", message: "Server error"})
+    }
+}
 
 
 exports.deleteProfile = async (req, res)=>{

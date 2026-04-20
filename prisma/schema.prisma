@@ -10,18 +10,19 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  
 
 }
 
 model Profile {
-  id  String  @id @default(uuid(7))
+  id  String  @id @default(dbgenerated("gen_random_uuid()")) @db.VarChar(36)
   name  String  @unique
   gender  String
   gender_probability  Float
-  sample_size Int
   age Int
   age_group String
-  country_id  String
+  country_id  String @db.VarChar(2)
+  country_name  String
   country_probability Float
   created_at  DateTime  @default(now())
 }
