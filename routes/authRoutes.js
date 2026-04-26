@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const axios = require("axios");
 const {prisma} = require("../controllers/dbController");
-const {v7: uuidv7} = require("uuid");
+const { randomUUID } = require('crypto');
 const {
     generateAccessToken,
     generateRefreshToken,
@@ -88,7 +88,7 @@ router.get('/github/callback', async(req, res)=>{
         if(!user){
             user = await prisma.user.create({
                 data: {
-                    id: uuidv7(),
+                    id: randomUUID(),
                     github_id: String(githubUser.id),
                     username: githubUser.login,
                     email: primaryEmail,
@@ -119,7 +119,7 @@ router.get('/github/callback', async(req, res)=>{
         // Save refresh token to DB
         await prisma.refreshToken.create({
             data: {
-                id: uuidv7(),
+                id: randomUUID(),
                 token: refreshToken, 
                 user_id: user.id,
                 expires_at: new Date(Date.now() + 5 * 60 * 1000), // 5min
@@ -199,7 +199,7 @@ router.post('/refresh', async (req, res) => {
 
     await prisma.refreshToken.create({
       data: {
-        id: uuidv7(),
+        id: randomUUID(),
         token: newRefreshToken,
         user_id: storedToken.user.id,
         expires_at: new Date(Date.now() + 5 * 60 * 1000),
